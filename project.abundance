@@ -1,9 +1,9 @@
 {
   "atomType": "Molecule",
-  "name": "HalfLap",
   "x": 0,
   "y": 0,
   "uniqueID": 1748626464674,
+  "name": "HalfLap",
   "ioValues": [
     {
       "name": "Assembly1",
@@ -32,8 +32,8 @@
       "atomType": "Input",
       "x": 0,
       "y": 0.2,
-      "uniqueID": "c807dbc3-8031-4a7f-b5f9-0d91023a4b76",
-      "name": "Assembly1",
+      "uniqueID": "7dcf7555-f247-4ed3-bc6e-7d3d16bff8b5",
+      "name": "Assembly2",
       "type": "geometry",
       "options": []
     },
@@ -41,14 +41,14 @@
       "atomType": "Input",
       "x": 0,
       "y": 0.2,
-      "uniqueID": "7dcf7555-f247-4ed3-bc6e-7d3d16bff8b5",
-      "name": "Assembly2",
+      "uniqueID": "c807dbc3-8031-4a7f-b5f9-0d91023a4b76",
+      "name": "Assembly1",
       "type": "geometry",
       "options": []
     },
     {
       "atomType": "Code",
-      "x": 0.4,
+      "x": 0.5,
       "y": 0.4,
       "uniqueID": "id-100",
       "ioValues": [
