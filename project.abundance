@@ -48,9 +48,9 @@
     },
     {
       "atomType": "Code",
-      "x": 0.6,
+      "x": 0.4,
       "y": 0.4,
-      "uniqueID": "e2a56f55-1c84-45ce-a6a6-ef953b43a8aa",
+      "uniqueID": "id-100",
       "ioValues": [
         {
           "name": "shape1",
@@ -61,175 +61,26 @@
           "ioValue": "__GEOMETRY_INPUT__"
         }
       ],
-      "interpreterVersion": 0,
-      "code": " \n//Inputs:[shape1, shape2]\n\n\nfunction lengthAlongDirection(shape, direction) {\n  let targetOrientation = new replicad.Vector([1, 0, 0]);\n  let rotationAxis = direction.cross(targetOrientation);\n  if (rotationAxis.Length != 0) {   // If direction isn't parallel to X axis..\n    rotationDegrees =\n      (Math.acos(\n        direction.dot(targetOrientation) /\n          (targetOrientation.Length * direction.Length)\n      ) *\n        360) /\n      (2 * Math.PI);\n  \n    shape = shape.clone()\n      .rotate(rotationDegrees, new replicad.Vector([0,0,0]), rotationAxis);\n  }\n\n  const bounds = shape.boundingBox.bounds;\n  return Math.abs(bounds[0][0] - bounds[1][0])\n}\n\nfunction vecStr(vec) {\n  return vec.x + \", \" + vec.y + \", \" + vec.z\n}\n\n/**\n * Return a new copy of shape1 with have of it's intersection with shape 2 removed\n * \n * Which half is selected is based on the shape of the intersectoin, we always split\n * the shared volume along its longest axis.\n */\nasync function performHalfLap(shape1, shape2) {\n  let wrapperShape = await Intersect(shape1, shape2)\n  let intersect = wrapperShape.geometry[0]\n  let boundingBox = intersect.boundingBox\n  let newBounds = undefined;\n  try {\n    newBounds = boundingBox.bounds;\n  } catch (error) {\n    // there' isn't an intersecting volume\n    console.log(\"no intersection. returning shape1 unmodified\")\n    return shape1\n  }\n\n  // collect candidate directions\n  const planarFaces = []\n  intersect.faces.forEach((face) => {\n    if (face.geomType == \"PLANE\") {\n      planarFaces.push(face)\n    }\n  });\n  const candidates = []\n  for (let i = 0; i < planarFaces.length; i++) {\n    for (let j = i + 1; j < planarFaces.length; j++) {\n      const vec = planarFaces[i].normalAt().cross(planarFaces[j].normalAt())\n      candidates.push(vec)\n    }\n  }\n\n  console.log(candidates.map((v) => {return [v.x, v.y, v.z]}))\n  // remove parallel candidates\n  for (var i = candidates.length - 1; i > 0; i--) {\n    for (var j = i - 1; j >= 0; j--) {\n      const v1 = candidates[i]\n      const v2 = candidates[j]\n      if (v1.cross(v2).Length == 0) { // parallel\n      //if (v1.x == v2.x && v1.y == v2.y && v1.z == v2.z) {\n        candidates.splice(j,1)\n        i = i - 1\n      }\n    }\n  }\n\n  console.log(candidates.map((v) => {return [v.x, v.y, v.z]}))\n  \n  if (candidates.length == 0) {\n    // Something is wrong, bail out without crashing\n    console.warn(\"unexpectely found no planar adjascent planar faces when doing half-lap\")\n    return shape1;\n  }\n\n  var maxLength = 0;\n  var splittingAxis = new replicad.Vector([1,0,0])\n  for (const axis of candidates) {\n    let len = lengthAlongDirection(intersect.clone(), axis)\n    if (len > maxLength) {\n      splittingAxis = axis;\n      maxLength = len\n    }\n  }\n\n  console.log(\"selected candidate:\")\n  console.log(maxLength)\n  console.log(vecStr(splittingAxis))\n\n\n  // get half of the intersected volume\n  const translationVec = splittingAxis.multiply(maxLength / 2)\n  const temporary = intersect.clone().translate(translationVec.x, translationVec.y, translationVec.z);\n  intersect = intersect.clone().cut(temporary);\n\n  wrapperShape.geometry[0] = temporary\n // return wrapperShape;\n\n let newShape1 = {\n    geometry: [shape1.geometry[0].clone().cut(intersect)],\n    tags: shape1.tags || [],\n    color: shape1.color,\n    plane: shape1.plane,\n    bom: shape1.bom || []\n  };\n  console.log(\"result for leaf: \")\n  console.log(newShape1)\n\n  return newShape1;\n\n//  return await Assembly([shape2, newShape1])//, cube]);\n}\n\n// choose midpoint\n         console.log(\"starting... \");\n         console.log(shape1)\n         console.log(shape2)\n         if (library[shape1] == undefined) {\n           throw new Error(\"Shape1 \" + shape1 + \" not a geometry id\")\n         }\n         if (library[shape2] == undefined) {\n           throw new Error(\"Shape2 \" + shape2 + \" not a geometry id\")\n         }\n\n         // TODO: someday we should pass the geoms directly, user should never have to deal with\n         // library lookups imo\n         shape1 = library[shape1]\n         shape2 = library[shape2]\n         \n\n         s2AsList = await AssemblyAsIterable(shape2);\n         console.log(\"s2AsList: \")\n         console.log(s2AsList);\n         let updatedShape1 = await AssemblyMap(shape1, async (s1leaf, _) => {\n            for (const el of s2AsList) {\n              s1leaf = await performHalfLap(s1leaf, el)\n            }\n            return s1leaf\n          })\n         console.log(\"done\");\n         console.log(updatedShape1)\n         const newShape2 = CutAssembly(shape2, [updatedShape1])\n         return Assembly([updatedShape1, newShape2])\n\n      \n\n      \n\n//      return Intersect(shape1, shape2)\n\n\n\n      //This makes a new copy of of the shape (to prevent garbage collection issues),\n      //and moves it in the X direction. Note that this will not work if the input is an assembly\n      /*let movedShape = importedShape.geometry[0].clone().translate([dist,0,0])\n      \n      //Console.log works for debugging to better see what is happening under the hood\n      console.log(\"Shape:\")\n      console.log(importedShape);\n      \n      //Shapes stored in the library have tags, a color, a plane, and a bill of materials like this. We don't modify them here\n      let shape1 = {\n        geometry: [movedShape],\n        tags: importedShape.tags,\n        color: importedShape.color,\n        plane: importedShape.plane,\n        bom: importedShape.bom\n      }\n      \n      //We could at this point return shape1 as a complete shape and it will be automatically written to the library for us\n      //return shape1\n      \n      //We can also create a new shape from scratch\n      let createdRectangle = replicad.drawRectangle(5,7)\n      //This is the plane we are going to put our new shape on\n      const newPlane = new Plane().pivot(0, 'Y');\n      //And we extrude the shape to make it 3D\n      let createdShape = createdRectangle.sketchOnPlane(newPlane).extrude(height)\n      \n      //For our new geometry we need to define the tags, color, plane, etc\n      let shape2 = {\n          geometry: [createdShape], \n          tags: [\"aTag\"],\n          color: '#A3CE5B',\n          plane: newPlane,\n          bom: []\n      }\n      \n      //Then we can return our created shape in just the same way\n      //return shape2\n      \n      //If we want to return both shapes at once, we can create an assembly with them\n      let anAssembly = {\n        geometry: [shape1, shape2], \n        tags: [\"aNewTag\"],\n        color: '#A3CF5B',\n        plane: newPlane,\n        bom: []\n      }\n      \n      //And we can return that in the same way\n      return anAssembly\n      \n      \n          /**\n          To Use the Code Atom, enter your inputs to the input list a.e Inputs:[shape, height]\n          If your input is connected to another atom with a replicad geometry you can access its geometry by looking up its ID in your library. a.e library[Input1].geometry[0] \n          Use any replicad available methods to modify your geometry. Learn more about all of the available methods at \n          https://replicad.xyz/docs/introapp/UserGuide.html \n          Return a replicad object that includes geometry, color, tags and plane. \n      \n      \n          Example Code Atom:\n      \n            Inputs:[shape, x];\n      \n            let finalShape = library[shape].geometry[0].clone.translate[x,0,0]\n      \n            return {geometry: finalShape, color: library[shape].color, plane: library[shape].plane, tags: library[shape].tags }\n      \n            - See more examples at _______ \n      \n      \n          */\n      "
-    },
-    {
-      "atomType": "Extrude",
-      "x": 0.3,
-      "y": 0.5,
-      "uniqueID": "id-69",
-      "ioValues": [
-        {
-          "name": "geometry",
-          "ioValue": "__GEOMETRY_INPUT__"
-        },
-        {
-          "name": "height",
-          "ioValue": 12
-        }
-      ]
-    },
-    {
-      "atomType": "Rectangle",
-      "x": 0.1,
-      "y": 0.5,
-      "uniqueID": "id-70",
-      "ioValues": [
-        {
-          "name": "x length",
-          "ioValue": 100
-        },
-        {
-          "name": "y length",
-          "ioValue": 100
-        }
-      ]
-    },
-    {
-      "atomType": "Rotate",
-      "x": 0.3,
-      "y": 0.7,
-      "uniqueID": "id-71",
-      "ioValues": [
-        {
-          "name": "geometry",
-          "ioValue": "__GEOMETRY_INPUT__"
-        },
-        {
-          "name": "x-axis degrees",
-          "ioValue": 90
-        },
-        {
-          "name": "y-axis degrees",
-          "ioValue": 0
-        },
-        {
-          "name": "z-axis degrees",
-          "ioValue": 0
-        }
-      ]
-    },
-    {
-      "atomType": "Move",
-      "x": 0.5,
-      "y": 0.7,
-      "uniqueID": "id-72",
-      "ioValues": [
-        {
-          "name": "geometry",
-          "ioValue": "__GEOMETRY_INPUT__"
-        },
-        {
-          "name": "xDist",
-          "ioValue": 50
-        },
-        {
-          "name": "yDist",
-          "ioValue": 0
-        },
-        {
-          "name": "zDist",
-          "ioValue": 0
-        }
-      ]
-    },
-    {
-      "atomType": "Assembly",
-      "x": 0.6,
-      "y": 0.7,
-      "uniqueID": "id-73",
-      "ioValues": [
-        {
-          "name": "makeDisjoint",
-          "ioValue": true
-        },
-        {
-          "name": "Shape 1",
-          "ioValue": "__GEOMETRY_INPUT__"
-        },
-        {
-          "name": "Shape2",
-          "ioValue": "__GEOMETRY_INPUT__"
-        }
-      ]
-    },
-    {
-      "atomType": "CutOrient",
-      "x": 0.7,
-      "y": 0.8,
-      "uniqueID": "id-74",
-      "name": "Cut Orient",
-      "ioValues": [
-        {
-          "name": "geometry",
-          "ioValue": "__GEOMETRY_INPUT__"
-        }
-      ],
-      "orientations": [
-        {
-          "downwardFaceIndex": 4,
-          "faceCount": 6,
-          "faceNormal": [
-            0,
-            1,
-            -1.1102230246251565e-16
-          ]
-        }
-      ],
-      "orientationsForHashed": 1
+      "interpreterVersion": 1,
+      "code": "/**\n * Half lap: wherever a part of shape1 overlaps a part of shape2, the shared\n * volume is split in two. Each part loses the half that lies against its own\n * open edge, so the two notches slide together.\n *\n * The split direction is one where shape1 has no material on one side of the\n * overlap and shape2 has none on the other, which the parts need to go\n * together. When several directions work, the one with the most open sides\n * wins, then the thinnest cut.\n */\n\n// Overlaps smaller than this fraction of the shared volume count as empty\nconst EMPTY_FRACTION = 0.01;\n\nfunction volumeOf(shape: any): number {\n  try {\n    return replicad.measureVolume(shape);\n  } catch (error) {\n    return 0;\n  }\n}\n\nfunction overlapVolume(a: any, b: any): number {\n  try {\n    return volumeOf(a.clone().intersect(b.clone()));\n  } catch (error) {\n    return 0;\n  }\n}\n\nfunction moved(shape: any, axis: any, distance: number): any {\n  return shape.clone().translate([axis.x * distance, axis.y * distance, axis.z * distance]);\n}\n\n// Extent of a shape along an axis, from the end points of its edges\nfunction extentAlong(shape: any, axis: any): number {\n  let min = Infinity;\n  let max = -Infinity;\n  shape.edges.forEach((edge: any) => {\n    [edge.startPoint, edge.endPoint].forEach((point: any) => {\n      const d = point.dot(axis);\n      min = Math.min(min, d);\n      max = Math.max(max, d);\n    });\n  });\n  return max - min;\n}\n\n// Distinct directions normal to the planar faces of the shared volume\nfunction candidateAxes(shape: any): any[] {\n  const axes: any[] = [];\n  shape.faces.forEach((face: any) => {\n    if (face.geomType != \"PLANE\") {\n      return;\n    }\n    const normal = face.normalAt().normalized();\n    if (!axes.some((axis) => axis.cross(normal).Length < 1e-6)) {\n      axes.push(normal);\n    }\n  });\n  return axes;\n}\n\n// solid1 minus the half of its overlap with solid2 that sits against solid1's open side\nfunction halfLapCut(solid1: any, solid2: any): any {\n  let shared;\n  try {\n    shared = solid1.clone().intersect(solid2.clone());\n  } catch (error) {\n    return solid1;\n  }\n  const sharedVolume = volumeOf(shared);\n  if (sharedVolume <= 0) {\n    return solid1; // the parts don't overlap\n  }\n  const empty = sharedVolume * EMPTY_FRACTION;\n\n  let best: any = undefined;\n  for (const axis of candidateAxes(shared)) {\n    const length = extentAlong(shared, axis);\n    if (length <= 0) {\n      continue;\n    }\n    // Blocks the size of the shared volume, just past it on either side\n    const ahead = moved(shared, axis, length);\n    const behind = moved(shared, axis, -length);\n    const open1Ahead = overlapVolume(solid1, ahead) < empty;\n    const open1Behind = overlapVolume(solid1, behind) < empty;\n    const open2Ahead = overlapVolume(solid2, ahead) < empty;\n    const open2Behind = overlapVolume(solid2, behind) < empty;\n\n    // shape1 must be open on the side of the half it gives up, shape2 on the other\n    let sign = 0;\n    if (open1Ahead && open2Behind) {\n      sign = 1;\n    } else if (open1Behind && open2Ahead) {\n      sign = -1;\n    }\n    if (sign == 0) {\n      continue;\n    }\n\n    const openSides = [open1Ahead, open1Behind, open2Ahead, open2Behind].filter((x) => x).length;\n    if (\n      best == undefined ||\n      openSides > best.openSides ||\n      (openSides == best.openSides && length < best.length)\n    ) {\n      best = { axis, length, sign, openSides };\n    }\n  }\n\n  if (best == undefined) {\n    console.warn(\"No direction lets these parts slide together; shape2 takes the whole overlap here\");\n    return solid1;\n  }\n\n  // The half of the shared volume on shape1's open side\n  const half = shared.clone().intersect(moved(shared, best.axis, (best.sign * best.length) / 2));\n  return solid1.clone().cut(half);\n}\n\nfunction run(shape1: Assembly, shape2: Assembly): Assembly {\n  if (!shape1 || !shape2) {\n    throw new Error(\"Connect a part to both shape1 and shape2\");\n  }\n  const parts2 = shape2.filterLeafs((leaf) => !leaf.is2D());\n\n  // Notch every part of shape1 against every part of shape2\n  const notched1 = shape1.onLeafs((leaf) => {\n    if (leaf.is2D()) {\n      return leaf;\n    }\n    let solid = leaf.geometry;\n    for (const part2 of parts2) {\n      solid = halfLapCut(solid, part2.geometry);\n    }\n    return new Assembly({ ...leaf, geometry: solid });\n  });\n  const parts1 = notched1.filterLeafs((leaf) => !leaf.is2D());\n\n  // shape2 gives up whatever still overlaps the notched shape1: the other half\n  const notched2 = shape2.onLeafs((leaf) => {\n    if (leaf.is2D()) {\n      return leaf;\n    }\n    let solid = leaf.geometry;\n    for (const part1 of parts1) {\n      if (overlapVolume(solid, part1.geometry) > 0) {\n        solid = solid.cut(part1.geometry.clone());\n      }\n    }\n    return new Assembly({ ...leaf, geometry: solid });\n  });\n\n  return new Assembly({ geometry: [notched1, notched2] });\n}\n",
+      "compiledCode": "\"use strict\";\n/**\n * Half lap: wherever a part of shape1 overlaps a part of shape2, the shared\n * volume is split in two. Each part loses the half that lies against its own\n * open edge, so the two notches slide together.\n *\n * The split direction is one where shape1 has no material on one side of the\n * overlap and shape2 has none on the other, which the parts need to go\n * together. When several directions work, the one with the most open sides\n * wins, then the thinnest cut.\n */\n// Overlaps smaller than this fraction of the shared volume count as empty\nconst EMPTY_FRACTION = 0.01;\nfunction volumeOf(shape) {\n    try {\n        return replicad.measureVolume(shape);\n    }\n    catch (error) {\n        return 0;\n    }\n}\nfunction overlapVolume(a, b) {\n    try {\n        return volumeOf(a.clone().intersect(b.clone()));\n    }\n    catch (error) {\n        return 0;\n    }\n}\nfunction moved(shape, axis, distance) {\n    return shape.clone().translate([axis.x * distance, axis.y * distance, axis.z * distance]);\n}\n// Extent of a shape along an axis, from the end points of its edges\nfunction extentAlong(shape, axis) {\n    let min = Infinity;\n    let max = -Infinity;\n    shape.edges.forEach((edge) => {\n        [edge.startPoint, edge.endPoint].forEach((point) => {\n            const d = point.dot(axis);\n            min = Math.min(min, d);\n            max = Math.max(max, d);\n        });\n    });\n    return max - min;\n}\n// Distinct directions normal to the planar faces of the shared volume\nfunction candidateAxes(shape) {\n    const axes = [];\n    shape.faces.forEach((face) => {\n        if (face.geomType != \"PLANE\") {\n            return;\n        }\n        const normal = face.normalAt().normalized();\n        if (!axes.some((axis) => axis.cross(normal).Length < 1e-6)) {\n            axes.push(normal);\n        }\n    });\n    return axes;\n}\n// solid1 minus the half of its overlap with solid2 that sits against solid1's open side\nfunction halfLapCut(solid1, solid2) {\n    let shared;\n    try {\n        shared = solid1.clone().intersect(solid2.clone());\n    }\n    catch (error) {\n        return solid1;\n    }\n    const sharedVolume = volumeOf(shared);\n    if (sharedVolume <= 0) {\n        return solid1; // the parts don't overlap\n    }\n    const empty = sharedVolume * EMPTY_FRACTION;\n    let best = undefined;\n    for (const axis of candidateAxes(shared)) {\n        const length = extentAlong(shared, axis);\n        if (length <= 0) {\n            continue;\n        }\n        // Blocks the size of the shared volume, just past it on either side\n        const ahead = moved(shared, axis, length);\n        const behind = moved(shared, axis, -length);\n        const open1Ahead = overlapVolume(solid1, ahead) < empty;\n        const open1Behind = overlapVolume(solid1, behind) < empty;\n        const open2Ahead = overlapVolume(solid2, ahead) < empty;\n        const open2Behind = overlapVolume(solid2, behind) < empty;\n        // shape1 must be open on the side of the half it gives up, shape2 on the other\n        let sign = 0;\n        if (open1Ahead && open2Behind) {\n            sign = 1;\n        }\n        else if (open1Behind && open2Ahead) {\n            sign = -1;\n        }\n        if (sign == 0) {\n            continue;\n        }\n        const openSides = [open1Ahead, open1Behind, open2Ahead, open2Behind].filter((x) => x).length;\n        if (best == undefined ||\n            openSides > best.openSides ||\n            (openSides == best.openSides && length < best.length)) {\n            best = { axis, length, sign, openSides };\n        }\n    }\n    if (best == undefined) {\n        console.warn(\"No direction lets these parts slide together; shape2 takes the whole overlap here\");\n        return solid1;\n    }\n    // The half of the shared volume on shape1's open side\n    const half = shared.clone().intersect(moved(shared, best.axis, (best.sign * best.length) / 2));\n    return solid1.clone().cut(half);\n}\nfunction run(shape1, shape2) {\n    if (!shape1 || !shape2) {\n        throw new Error(\"Connect a part to both shape1 and shape2\");\n    }\n    const parts2 = shape2.filterLeafs((leaf) => !leaf.is2D());\n    // Notch every part of shape1 against every part of shape2\n    const notched1 = shape1.onLeafs((leaf) => {\n        if (leaf.is2D()) {\n            return leaf;\n        }\n        let solid = leaf.geometry;\n        for (const part2 of parts2) {\n            solid = halfLapCut(solid, part2.geometry);\n        }\n        return new Assembly({ ...leaf, geometry: solid });\n    });\n    const parts1 = notched1.filterLeafs((leaf) => !leaf.is2D());\n    // shape2 gives up whatever still overlaps the notched shape1: the other half\n    const notched2 = shape2.onLeafs((leaf) => {\n        if (leaf.is2D()) {\n            return leaf;\n        }\n        let solid = leaf.geometry;\n        for (const part1 of parts1) {\n            if (overlapVolume(solid, part1.geometry) > 0) {\n                solid = solid.cut(part1.geometry.clone());\n            }\n        }\n        return new Assembly({ ...leaf, geometry: solid });\n    });\n    return new Assembly({ geometry: [notched1, notched2] });\n}\n"
     }
   ],
   "allConnectors": [
     {
-      "ap2Name": "number or geometry",
-      "ap1ID": "e2a56f55-1c84-45ce-a6a6-ef953b43a8aa",
-      "ap2ID": 1748626473635
+      "ap2Name": "shape2",
+      "ap1ID": "7dcf7555-f247-4ed3-bc6e-7d3d16bff8b5",
+      "ap2ID": "id-100"
     },
     {
       "ap2Name": "shape1",
-      "ap1ID": "id-69",
-      "ap2ID": "e2a56f55-1c84-45ce-a6a6-ef953b43a8aa"
+      "ap1ID": "c807dbc3-8031-4a7f-b5f9-0d91023a4b76",
+      "ap2ID": "id-100"
     },
     {
-      "ap2Name": "geometry",
-      "ap1ID": "id-69",
-      "ap2ID": "id-71"
-    },
-    {
-      "ap2Name": "geometry",
-      "ap1ID": "id-70",
-      "ap2ID": "id-69"
-    },
-    {
-      "ap2Name": "geometry",
-      "ap1ID": "id-71",
-      "ap2ID": "id-72"
-    },
-    {
-      "ap2Name": "shape2",
-      "ap1ID": "id-72",
-      "ap2ID": "e2a56f55-1c84-45ce-a6a6-ef953b43a8aa"
-    },
-    {
-      "ap2Name": "Shape 1",
-      "ap1ID": "id-72",
-      "ap2ID": "id-73"
-    },
-    {
-      "ap2Name": "geometry",
-      "ap1ID": "id-73",
-      "ap2ID": "id-74"
+      "ap2Name": "number or geometry",
+      "ap1ID": "id-100",
+      "ap2ID": 1748626473635
     }
   ],
   "unitsKey": "MM",
